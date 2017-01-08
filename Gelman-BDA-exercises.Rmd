@@ -1,0 +1,70 @@
+---
+title: "Solutions to some computer exercises in the BDA book by Gelman et al. (2nd ed.)"
+author: "Bryan Mayer"
+date: "January 8, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(xtable)
+
+load('BDA-data.RData')
+
+```
+
+# Chapter 2
+
+## Exercise 2.13
+
+### Data:
+```{r, echo = F, results = "asis"}
+airline_data %>% xtable(caption = "Airline data from Table 2.2 (BDA 2nd ed.). Death rate is passenger deaths per 100 million passenger miles \\label{tab:airline}") %>% 
+  print(comment = F, include.rownames = F)
+
+```
+
+### (a) Assume accidents are independent with Poisson($\theta$). Set a prior for $\theta$ and find posterior distribution using the data. Give a 95% predictive interval for fatal accidents in 1986.
+
+Solution: Use gamma(0,0) as a non-informative prior. Conjugate posterior is gamma(0 + 10 * mean(y), 0 + 10)
+
+```{r}
+sim_theta = rgamma(5000, shape = 10 * mean(airline_data$Fatal_accidents), rate = 10)
+hist(sim_theta, xlab = "theta|y")
+summary(sim_theta)
+quantile(sim_theta, c(0.025, 0.975))
+
+predictive_post = rpois(5000 , sim_theta)
+hist(predictive_post, xlab = "y~|theta")
+quantile(predictive_post, c(0.025, 0.975))
+
+```
+
+### (b) Assume accidents each year follow independent Poisson with constant rate times numbers of passenger miles flown. Set a prior distribution for theta and repeat analysis of (a). For the predictive distribution, assume 8e11 passenger miles were flown in 1986.
+
+Solution: Exposure variable is 1/death rate (100 million passenger miles/death) * passenger deaths * 1e8
+
+likelihood is conditioned on exposure variable too, so 
+$$
+y|\theta, E \sim Poisson(\theta * E)
+$$
+
+The posterior distribution is now gamma(0 + 10$\bar{y}$, 0 + 10$\bar{E}$).
+
+
+```{r}
+exposure_var = airline_data$Passenger_deaths/airline_data$Death_rate * 1e8
+
+sim_theta = rgamma(5000, shape = 10 *mean(airline_data$Fatal_accidents), rate = 10 * mean(exposure_var))
+hist(sim_theta, xlab = "theta|y")
+summary(sim_theta)
+quantile(sim_theta, c(0.025, 0.975))
+
+predictive_post = rpois(5000 , sim_theta * 8e11)
+hist(predictive_post, xlab = "y~|theta")
+quantile(predictive_post, c(0.025, 0.975))
+
+```
