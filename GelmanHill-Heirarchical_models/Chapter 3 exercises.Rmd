@@ -1,0 +1,358 @@
+---
+title: "Chapter 3 exercises"
+output: html_document
+---
+
+```{r data and packages, echo = F, message = F}
+#library(RCurl)
+
+example_data = as.data.frame(data.table::fread("ARM_Data/exercise2.1.dat"))
+
+```
+
+## Question 1
+
+Fitting example data
+
+### a) fit linear regression, summarize inference
+### b) plot the results
+
+```{r}
+model1 = lm(y ~ x1 + x2, data = example_data[1:40, ])
+summary(model1)
+sigma = summary(model1)$sigma
+
+
+with(example_data, plot(x1, y))
+curve(cbind(1, x,  mean(example_data$x2[1:40])) %*% coef(model1), add = T)
+
+with(example_data, plot(x2, y))
+curve(cbind(1, mean(example_data$x1[1:40]), x) %*% coef(model1), add = T)
+
+```
+
+### c) plot residuals
+
+```{r}
+
+residuals = example_data$y[1:40] - predict(model1, example_data[1:40,])
+
+with(example_data[1:40, ], plot(x1, residuals))
+abline(a = 0, b = 0)
+abline(a = -sigma, b = 0, lty = 2)
+abline(a = sigma, b = 0, lty = 2)
+
+with(example_data[1:40, ], plot(x2, residuals))
+abline(a = 0, b = 0)
+abline(a = -sigma, b = 0, lty = 2)
+abline(a = sigma, b = 0, lty = 2)
+
+```
+
+### d) predict using the remaining 20 data points
+
+The diagnostics aren't great but the predictions seem ok.
+
+```{r}
+predict_y = predict(model1, example_data[41:60, ])
+
+with(example_data, plot(x1, y))
+with(example_data[41:60,], points(x1, predict_y, pch = 2))
+
+with(example_data, plot(x2, y))
+with(example_data[41:60,], points(x2, predict_y, pch = 2))
+```
+
+## Question 2
+
+log earnings ~ log height
+
+* 66 inch tall person makes $30K
+
+* 1% height increase = 0.8% increase in earnings
+
+* 95% of predicted earnings fall within a factor of 1.1
+
+### a) give the line and model sd
+
+*First the equation*
+
+Model 2: $Log E2 = log(\$30K) + m * log(H2/66)$    
+Model 1: $log E1 = log(\$30K) + m * log(H1/66)$
+
+If there is an 0.8% increase in earnings that means:
+$$E2 = 1.008 * E1 $$
+$$log(E2) - log(E1) \approx 0.008 $$
+
+This is per 1% height increase so similarly:
+$$log(H2) - log(H1) \approx 0.01 $$
+
+So if you do model 2 - model 1:
+$$log(E2) - log(E1) = m * (log(H2) - log(H1)) $$
+$$0.008 = m * 0.01$$
+$$m =  0.8 $$
+
+The final equation is:
+$$ Log(E) = log($30K) + 0.998 *log(H/66) $$
+
+*now the sd (which I'm not entirely sure about and this is surely wrong)*
+
+$$  log(1) +- 1.96 * log(sd) = log(1.1) $$
+$$ sd = exp(log(1.1)/1.96) $$
+
+### b) suppose sd of log height is 5%, what is R^2
+
+The equation for R-sq: $R^2 = 1 - \sigma/{\sigma_y}^2$
+
+But we are given $\sigma_x$.If we assume that is a typo. 5% tells us that for earnings, the sd is about 1.05. so we end up with:
+$$ 1 - 1.049^2/1.05^2 = 0$$
+
+
+## Question 3
+
+### a) Generate 1000 N(0,1) for two variables and run the regression
+
+```{r}
+set.seed(5)
+var1 = rnorm(1000)
+var2 = rnorm(1000)
+
+model3 = lm(var2 ~ var1)
+summary(model3)
+
+
+```
+
+### b) repeat this 100 times, save z, how many z > 2
+```{r}
+set.seed(150)
+z_tests = rep(NA, 100)
+for(i in 1:100){
+  var1 = rnorm(1000)
+  var2 = rnorm(1000)
+  fit = lm(var2 ~ var1)
+  z_tests[i] = coef(fit)[2]/coef(summary(fit))[2,2]
+}
+hist(z_tests, breaks = 20)
+mean(abs(z_tests) > 2)
+
+```
+
+## Question 4
+
+Load the child iq data. it has age 3 IQ scores with moms age at childs birth and moms education for 400 ids.
+
+```{r}
+library(foreign)
+iq.data = read.dta("ARM_Data/child.iq/child.iq.dta")
+```
+
+### a) Fit IQ on age, plot it, check assumptions and interpret the slope.
+
+```{r}
+model_q4 = lm(ppvt ~ momage, data = iq.data)
+summary(model_q4) 
+
+plot(iq.data$momage, model_q4$residuals);abline(0,0)
+
+with(iq.data, plot(momage, ppvt))
+curve(coef(model_q4)[1] + coef(model_q4)[2] * x, add = T)
+
+```
+
+Child's IQ increases 0.84 on average per year increase in mom's age at child's birth. The model fit is poor but the effect is signficant.
+
+### b) Add in education.
+```{r}
+model_q4b = lm(ppvt ~ momage + educ_cat, data = iq.data)
+summary(model_q4b) 
+
+with(subset(iq.data, educ_cat == 1), plot(momage, ppvt))
+curve(cbind(1, x, 1) %*% coef(model_q4b), add = T)
+for(i in 2:4){
+  with(subset(iq.data, educ_cat == i), points(momage, ppvt, col = i))
+  curve(cbind(1, x, i) %*% coef(model_q4b), add = T, col = i)
+}
+
+```
+
+For a given mom's age, IQ increases by 4.7 points per increase in education category. For a given education category, IQ increases by 0.34 per year increase in mom's age (not significant).
+
+### c) Make a new variable for whether mom completes high school. Add an interaction.
+
+```{r}
+iq.data$mom_posths = with(iq.data, ifelse(educ_cat > 1, 1, 0))
+
+model_q4c = lm(ppvt ~ momage * mom_posths, data = iq.data)
+summary(model_q4c) 
+
+with(subset(iq.data, mom_posths == 0), plot(momage, ppvt))
+curve(cbind(1, x, 0, 0) %*% coef(model_q4c), add = T)
+
+with(subset(iq.data, mom_posths == 1), points(momage, ppvt, col = 2))
+curve(cbind(1, x, 1, x) %*% coef(model_q4c), add = T, col = 2)
+
+```
+
+### d) Repeat model b for first 200, predict next 200, compare
+```{r}
+train_data = iq.data[1:200, ]
+model_q4d = lm(ppvt ~ momage + educ_cat, data = train_data)
+
+predict_data = iq.data[201:400,]
+predict_data$predict.iq = predict(model_q4d, predict_data)
+
+with(predict_data, plot(y = ppvt, x = predict.iq, "n"))
+for(i in 1:4){
+  with(predict_data, 
+     points(y = ppvt[educ_cat == i], x = predict.iq[educ_cat == i], col = i))
+}
+abline(0, 1)
+
+```
+
+
+## Question 5
+
+Using the beauty data, student evaluation of instructors beauty and teaching quality for courses at UTexas. Evaluations come at end of course, beauty scores come from non-students (at a later time).
+
+
+```{r}
+beauty = readr::read_csv("http://www.stat.columbia.edu/~gelman/arm/examples/beauty/ProfEvaltnsBeautyPublic.csv")
+
+hist(beauty$courseevaluation)
+```
+
+### a) fit a model testng if beauty predicts outcome.
+
+```{r}
+beauty_model = lm(courseevaluation ~ female + btystdave + age + minority + nonenglish + students + tenured, data = beauty)
+
+summary(beauty_model)
+
+par(mfrow = c(2,2))
+plot(beauty_model)
+par(mfrow = c(1,1))
+
+colors <- ifelse(beauty$female == 1, "red", "blue")
+plot(beauty$btystdave, beauty$courseevaluation, col = colors, pch = 20)
+for(i in 0:1)
+  curve(cbind(1, i, x, 48, 0.5, 0.5, 30, 0.5) %*% coef(beauty_model), 
+        add = T,
+        col = data.frame(x = c("blue", "red"), stringsAsFactors = F)$x[i + 1])
+legend(1, 2.85, legend = c("Lady", "Dude"), col = unique(colors), pch = 20)
+
+```
+
+### b) mess around with other models
+
+Based on my first model, I dumped a few variable that didn't seem important. I dichomitimized age. I standardardized student total. Tenure and tenure track have a lot of overlap, basically because tenured == 1 corresponds to tenuretrack. I threw an 3-way interaction in there for fun.
+
+
+```{r}
+beauty$old = ifelse(beauty$age > 50, 1, 0)
+beauty$studentz = with(beauty, (log(students) - mean(students))/sd(students))
+beauty$large_class = with(beauty, students > 50)
+
+
+beauty_model_full = lm(courseevaluation ~ female * btystdave * old + nonenglish + large_class + tenured, data = beauty)
+
+summary(beauty_model_full)
+
+```
+
+The model isnt that great ($R^2 = 16%$) but the diagnostics seem ok.
+
+```{r}
+par(mfrow = c(2,2))
+plot(beauty_model_full)
+par(mfrow = c(1,1))
+
+```
+
+```{r}
+library(ggplot2)
+
+prediction_data = expand.grid(
+  btystdave = seq(-1.54, 1.88, by = 0.1),
+  female = c(0, 1),
+  old = c(0, 1),
+  nonenglish = 0,
+  large_class  = F,
+  tenured = 0.5
+)
+prediction_data$courseevaluation = predict(beauty_model_full, prediction_data)
+
+ggplot(data = subset(beauty, nonenglish == 0),
+       aes(x = btystdave, y = courseevaluation, 
+                          colour = factor(old), linetype = factor(old),
+           shape = large_class)) +
+  geom_point() +
+  geom_line(data = prediction_data) +
+  #geom_smooth(method= "lm") +
+  facet_wrap(~female, labeller = 
+               labeller(female = c("0" = "Dude", "1" = "Lady"),
+             nonenglish = c("0" = "English-speaker", "1" = "Non-english-speaker"))) +
+  theme_bw() +
+  scale_color_discrete("Age", labels = c("<= 50", "> 50")) +
+#  scale_shape_discrete("Non-english", labels = c("No", "Yes")) +
+  scale_linetype_discrete("Age", labels = c("<= 50", "> 50")) +
+  theme(legend.position = "top", legend.box = "horizontal")
+
+```
+
+There are repeat teachers, so lets average their scores.
+
+```{r}
+library(dplyr)
+beauty_agg = beauty %>% 
+  group_by(profnumber, btystdave, female, old, nonenglish, tenured) %>%
+  summarize(
+    avg_course_rating = mean(courseevaluation),
+    pct_large_class = mean(large_class),
+    large_class_majority = 1 * (pct_large_class > 0.5)
+  )
+
+
+beauty_model2 = lm(avg_course_rating ~ female * btystdave * old + nonenglish + large_class_majority + tenured, data = beauty_agg)
+
+summary(beauty_model2)
+
+par(mfrow = c(2,2))
+plot(beauty_model2)
+par(mfrow = c(1,1))
+```
+
+```{r}
+prediction_data2 = expand.grid(
+  btystdave = seq(-1.54, 1.88, by = 0.1),
+  female = c(0, 1),
+  old = c(0, 1),
+  nonenglish = 0,
+  large_class_majority  = c(0,1),
+  tenured = 0.5
+)
+prediction_data2$avg_course_rating = predict(beauty_model2, prediction_data2)
+
+ggplot(data = beauty_agg,
+       aes(x = btystdave, y = avg_course_rating, 
+                          colour = factor(old), linetype = factor(old),
+           shape = factor(nonenglish))) +
+  geom_point() +
+  geom_line(data = prediction_data2) +
+  facet_grid(large_class_majority~female, labeller = 
+               labeller(
+                 female = c("0" = "Dude", "1" = "Lady"),
+                 large_class_majority = 
+                    c("0" = "Most classes < 50 students", 
+                     "1" = "Most classes > 50 students"),       
+                 nonenglish = c("0" = "English-speaker", 
+                                "1" = "Non-english-speaker")),
+             ) +
+  theme_bw() +
+  scale_color_discrete("Age", labels = c("<= 50", "> 50")) +
+  scale_shape_discrete("Non-english", labels = c("No", "Yes")) +
+  scale_linetype_discrete("Age", labels = c("<= 50", "> 50")) +
+  theme(legend.position = "top", legend.box = "horizontal")
+
+```

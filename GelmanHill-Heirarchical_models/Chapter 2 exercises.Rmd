@@ -1,0 +1,96 @@
+---
+title: "Chapter 2 exercises"
+author: "Bryan Mayer"
+date: "1/15/2017"
+output: html_document
+---
+```{r data and packages, echo = F, message = F}
+#library(RCurl)
+
+birth_proportions = readr::read_csv("ARM_Data/births.csv")
+
+```
+
+## Question 2 - Birth proprotion datafor girls (3900 births per month)
+
+### a. compute sd and compare to null sd
+
+```{r Question 2}
+
+sample_sd = sd(birth_proportions$prop)
+est_sd = sqrt(mean(birth_proportions$prop) * (1- mean(birth_proportions$prop))/3903)
+
+sample_sd
+est_sd
+
+
+#I guess?
+sample_sd + c(-1, 1) * qchisq(c(0.025, 0.975), 23) * est_sd^2
+
+```
+
+
+## Question 3
+
+Let x = x1 + ... + x20
+
+xi ~ Unif, mean = 1, var = 1/12
+
+x ~ N(mean(xi) * n, sd(xi) * sqrt(n))
+
+plot the hist of 1000 simulations, also show normal density
+
+```{r question 3}
+
+
+rand_u = NULL
+for(i in 1:1000){
+  rand_u = c(rand_u, sum(runif(20)))
+}
+
+x   <- seq(1, 20, length=10000)
+y   <- dnorm(x, mean= 20 * 0.5, sd=sqrt(1/12)*sqrt(20))
+plot(x,y, type="l", lwd=1, xlim = c(1, 20), ylim = c(0, 0.5))
+par(new = T)
+hist(rand_u, freq = F, xlim = c(1, 20), ylim = c(0, 0.5), breaks =25)
+
+
+
+```
+
+## Question 4
+
+men_height ~ N(69.1, 2.9)
+
+women_height ~ N(63.7, 2.7)
+
+
+x = mean{100 men}
+
+y = mean{100 women}
+
+E[x -y] = Ex - Ey
+
+V[x - y] = Vx + Vy = 1/100 * [var(xi) + var(yi)] (see below) 
+
+Vx = var(1/100 * sum(xi)) = 100/100^2 * var(xi) -> same for y
+
+
+```{r question 4}
+men_mu = 69.1
+men_sd = 2.9
+wmen_mu = 63.7
+wmen_sd = 2.7
+
+diff = rep(NA, 1000)
+for(i in 1:1000){
+  diff[i] = mean(rnorm(100,men_mu, men_sd)) - mean(rnorm(100, wmen_mu, wmen_sd))
+}
+hist(diff, breaks = 35)
+mean(diff)
+sd(diff)
+
+men_mu - wmen_mu
+sqrt(men_sd^2/100 + wmen_sd^2/100)
+
+```
