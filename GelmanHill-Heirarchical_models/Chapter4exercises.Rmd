@@ -1,0 +1,337 @@
+---
+title: "Chapter 4 exercises"
+date: "1/29/2017"
+output: html_document
+---
+
+```{r, message = F, warning = F}
+suppressWarnings(library(dplyr))
+```
+
+
+## Question 1
+
+Model: $log(weight) = -3.5 + 2 * log(height) + error$
+
+Weight in pounds. height in inches. Error sd = 0.25.
+
+### a) Fill in the blanks (bolded): 
+
+Approximately 65% of the persons will have weights within a factor of __`r round(exp(-0.25), 2)`__ and __`r round(exp(0.25), 2)`__ of their predicted values. 
+
+Answered using the error sd: ($e^{-0.25}$, $e^{0.25}$)
+
+### b) Plot a scatterplot and regression line for this model.
+
+```{r}
+set.seed(10)
+
+# make up some some simple height input data
+height = rnorm(1000, 68, 3)
+
+log_weight = -3.5 + 2 * log(height) + rnorm(1000, 0, 0.25)
+
+q1_model = lm(log_weight ~ log(height))
+
+summary(q1_model)
+
+plot(log(height), log_weight)
+curve(cbind(1, x) %*% coef(q1_model), add = T, col = 3)
+
+```
+
+## Question 2
+
+Use earnings data: earnings, sex, height, weight
+
+### a) Load and QC the data
+
+There is no weight variable, so I pulled in birth year.
+
+*load:
+```{r}
+earnings_dat = dplyr::select(foreign::read.dta("ARM_Data/earnings/heights.dta"),
+               earn, sex, height, yearbn)   
+
+str(earnings_dat)
+```
+
+*check the variables
+
+```{r}
+par(mfrow = c(2,2))
+hist(earnings_dat$earn, breaks = 100)
+hist(earnings_dat$sex, breaks = 100)
+hist(earnings_dat$height, breaks = 100)
+hist(earnings_dat$yearbn, breaks = 100) #
+
+par(mfrow = c(1,1))
+ftable(cut(earnings_dat$earn, breaks = c(0, 1, 10, Inf), right = F))
+
+```
+
+Earnings has a bunch of 0s and NAs. 0s are odd so I will remove them, IRL this should be investigated further. There is a bump in yearbn at 99, probably a missing code so will remove those too.
+
+*complete case for covenience, make final variables
+```{r}
+earnings_clean = subset(earnings_dat, !is.na(earn) & earn > 0 & yearbn < 99)
+
+#stole these from other person posting answers
+earnings_clean$earn = earnings_clean$earn/1000
+earnings_clean$sex = factor(earnings_clean$sex, labels=c("male", "female"),
+                            ordered = F)
+
+#note that once you center birth year that the interpretation is the same as decreasing age, so flip the sign to represent getting older. See below.
+earnings_clean$yearbn_ctr =  earnings_clean$yearbn - mean(earnings_clean$yearbn)
+earnings_clean$age_yrs_ctr = mean(earnings_clean$yearbn) - earnings_clean$yearbn
+mean(earnings_clean$yearbn)
+
+```
+
+Age$_i$ = current_year - $yearbn_i$
+
+Age_center$_i$ = Age$_i$ - E[Age]    
+Age_center$_i$ = current_year - $yearbn_i$ - E[current_year - $yearbn$]    
+Age_center$_i$ = E[$yearbn$] - $yearbn_i$. 
+
+The range of this variable is 72 years, which means it could range from like 16 to 89.
+
+I chose to the yearbn centered variable (average year 1949) because I think the interpretation is actually clearer than ages without a reference year.
+
+### b) Run model: earnings ~ height. Transform the data so that the intercept is the average earnings at the average height.
+
+Center height at mean. **Intercept earnings move from -62K to 23K with transformation.** Note how the rest of the model is unaffected.
+
+```{r}
+earn_model2b = lm(earn ~ height, data = earnings_clean)
+summary(earn_model2b)
+
+
+earnings_clean$height_ctr = earnings_clean$height - mean(earnings_clean$height)
+  
+  
+earn_model2b_2 = lm(earn ~ height_ctr, data = earnings_clean)
+summary(earn_model2b_2)
+
+
+```
+
+### c) Fit some models
+
+Will try transforming earnings because of the skew. I normalized height ignoring issues with sex. Year born was scaled in decade increments.
+
+Trying the following models (set up *a prior*):
+1. All three predictors (height, sex, yearbn): with log earn and without to test log transform diagnostics.    
+2. Sex and yearbn interaction.    
+3. Sex and height interaction: will include sex*yearbn depending on results.
+
+Note that mean height is 67 inches and mean year born is 1949. Earnings is scaled by $1000.
+
+Models 1:    
+The diagnostics for this model are not great, there seems to be some clusters.
+```{r}
+# earnings_clean = earnings_clean %>% group_by(sex) %>%
+#   mutate(mean_height = mean(height), sd_height = sd(height)) %>%
+#   ungroup() %>%
+#   rowwise() %>% mutate(height_norm_sex = (height - mean_height)/sd_height)
+
+earnings_clean$log_earn = log(earnings_clean$earn)
+earnings_clean$height_norm = earnings_clean$height_ctr/sd(earnings_clean$height)
+earnings_clean$yearbn_ctr_decade = earnings_clean$yearbn_ctr/10
+earnings_clean$log_earn = log(earnings_clean$earn)
+
+earn_model_1a = lm(earn ~ height_norm + yearbn_ctr_decade + sex, data = earnings_clean)
+earn_model_1b = lm(log_earn ~ height_norm + yearbn_ctr_decade + sex, data = earnings_clean)
+# earn_model_1c = lm(log_earn ~ height_norm_sex + yearbn_ctr_decade + sex, data = earnings_clean)
+
+par(mfrow = c(2, 2))
+plot(earn_model_1a)
+plot(earn_model_1b)
+
+```
+
+Model 2: going with the log_earn model because it somewhat controls the outlying residuals a little better.
+
+```{r}
+earn_model_2 = lm(log_earn ~ height_norm + yearbn_ctr_decade * sex, data = earnings_clean)
+
+summary(earn_model_2)
+
+```
+
+Model 3: leaving in sex/yearbn interaction
+
+```{r}
+earn_model_3 = lm(log_earn ~ yearbn_ctr_decade * sex + height_norm * yearbn_ctr_decade, data = earnings_clean)
+
+summary(earn_model_3)
+
+earn_model_3b = lm(log_earn ~ sex + height_norm * yearbn_ctr_decade, data = earnings_clean)
+
+summary(earn_model_3b)
+
+```
+
+It seems that the height\*year interaction might explain some of the sex\*interaction. So I removed the latter. The R-sq remains the same (11%). The model doesn't explain a lot of the variance and the diagnostics aren't great.
+
+```{r}
+par(mfrow = c(2, 2))
+
+plot(earn_model_3b)
+```
+
+### c) Interpret the model coefficients:
+
+Note: x times difference can be rescaled relative to 1 and interpretted as percentage. If you deal with risk differences (arithmetic differences in risk), this is confusing.
+
+Intercept: The average earnings are $21K for a male of average population height (67 inches) born in 1949.
+
+sexFemale: Earnings for females are about 0.66 ($e^{-0.41}$) times lower than a male of same height and birth year. I.e., the earnings change by -44% between males and females of same age and height.
+
+height_norm: Earnings increase an average 1.1 ($e^{0.099}$) times per std. deviation increase in height between two people of the same sex born in 1949. 
+
+yearbn_ctr_decade: Earnings decrease an average 0.91 ($e^{-0.085}$) times per decade increase in birth year between two people of the same sex who are 67 inches in height. 
+
+height_norm:yearbn_ctr_decade: Between two people of the same sex, for each std. deviation increae in height, earnings decrease 0.91 ($e^{--0.06}$) times further for each decade increase in birth year. Between two people of the same sex, earnings increased per std. deviation increse in height are (modulated) decreased by 0.91 ($e^{--0.06}$) times per each decade increase in birth year. 
+
+## Question 3 
+
+
+The following was generated from a regression of weight on age per 10 years. The output was provided and curated by IamGianluca on github.
+
+```{r, eval = F, include = T}
+lm(formula = weight ~ age10)
+                  coef.est coef.se 
+(Intercept)       161.0     7.3 
+age10             2.6       1.6
+---
+  n = 2009, k = 2
+  residual sd = 119.7, R-Squared = 0.00
+
+
+lm(formula = weight ~ age10 + age10.sq) 
+                  coef.est coef.se
+(Intercept)       96.2      19.3 
+age10             33.6      8.7 
+age10.sq          -3.2      0.9
+---
+  n = 2009, k = 3, 
+  residual sd = 119.3, R-Squared = 0.01
+
+
+lm(formula = weight ~ age30.44 + age45.64 + age65up)
+                  coef.est coef.se
+(Intercept)       157.2    5.4
+age30.44TRUE      19.1     7.0
+age45.64TRUE      27.2     7.6
+age65upTRUE       8.5      8.7
+---
+  n = 2009, k = 4
+  residual sd = 119.4, R-Squared = 0.01
+```
+
+### a-c) plot the regression results for each model.
+
+(I'm assuming age ranges between 18 and 80)
+
+```{r}
+par(mfrow = c(1,1))
+age = seq(18,80, by = 1)
+weight = seq(140, 190, length = length(age))
+
+plot(age, weight, "n")
+curve(cbind(1, x/10) %*% c(161, 2.6), add = T, col = "red")
+curve(cbind(1, x/10, x^2/100) %*% c(96.2, 33.6, -3.2), add = T, col = "blue")
+#model 3
+curve(cbind(1,x) %*% c(157.2, 0), add = T, xlim = c(18, 30))
+curve(cbind(1,x) %*% c(157.2 + 19.1, 0), add = T, xlim = c(30, 44))
+curve(cbind(1,x) %*% c(157.2 + 27.2, 0), add = T, xlim = c(44, 64))
+curve(cbind(1,x) %*% c(157.2 + 8.5, 0), add = T, xlim = c(64, 80))
+legend(x = 50, 160, c("model1", "model2", "model3"), lty = 1, col = c("red", "blue", "black"))
+
+```
+
+## Question 4
+
+Using `pollution` data.
+
+```{r}
+pollution = foreign::read.dta("http://www.stat.columbia.edu/~gelman/arm/examples/pollution/pollution.dta")
+```
+
+### a) Plot and fit an lm of mortality rate versus nitric oxide. Show diagnostics.
+
+```{r}
+with(pollution, plot(nox, mort))
+model4a = lm(mort ~ nox, data = pollution)
+par(mfrow = c(2,2))
+plot(model4a)
+par(mfrow = c(1,1))
+```
+
+### b) Transform the data to adjust for issues seen in a)
+
+
+log looks good for the nox variable. Using a log(predictor), choose a base that makes the interpretation works. Otherwise, Log the outcome and use the elasticity interpretation. Choosing the former.
+
+```{r}
+with(pollution, plot(log(nox), mort))
+model4b1 = lm(mort ~ log10(nox), data = pollution)
+model4b2 = lm(log(mort) ~ log(nox), data = pollution)
+
+par(mfrow = c(2,2))
+plot(model4b1)
+plot(model4b2)
+par(mfrow = c(1,1))
+
+summary(model4b1)
+#summary(model4b2)
+
+```
+
+### c) For every 10 times increase in nitric oxide, mortality rate increases 35.1. (log-log: per every unit increase in nitric acid, mortality rate increases about 1.5%)
+
+### d) Add in sulfur dioxide and hydrocarbons
+
+```{r}
+par(mfrow = c(2,2))
+with(pollution, {plot(so2, mort); plot(hc, mort)})
+with(pollution, {plot(log10(so2), mort); plot(log10(hc), mort)})
+
+model_4d = lm(mort ~ log10(nox) + log10(so2) + log10(hc), data = pollution)
+summary(model_4d)
+plot(model_4d)
+
+
+```
+
+Model seems ok (24% R-sq), there is an outlier (low so2).
+
+### e) cross-validation, use model in d) to fit half of data then predict second half
+
+```{r}
+set.seed(15)
+row_sample = sample(dim(pollution)[1], round(dim(pollution)[1]/2))
+
+model_4e = lm(mort ~ log10(nox) + log10(so2) + log10(hc), data = pollution[row_sample, ])
+
+fitted_values = predict(model_4e, pollution[-row_sample, ])
+
+plot(fitted_values, pollution[-row_sample, "mort"], ylab = "cross-v data", main = "dotted line = 1sd")
+abline(0, 1)
+abline(summary(model_4e)$sigma, 1, lty = 2)
+abline(-summary(model_4e)$sigma, 1, lty = 2)
+
+```
+
+## Question 6. Interpret the coefficient in the following model:
+
+Model: $log(Q) = \alpha + \beta log(P)$.     
+Q = smokes bought.    
+P = cost of cigarettes.    
+unit = counties in US.
+$\beta = 0.3$
+
+Per every unit increase in average price in cigarettes, the purchased quantity inceases by `r round(exp(0.3), 2)` ($e^{0.3}$) times. 
+
+

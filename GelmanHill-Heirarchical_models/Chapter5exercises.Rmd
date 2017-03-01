@@ -1,0 +1,149 @@
+---
+title: "Chapter 5 exercises"
+date: "2/6/2017"
+output: html_document
+---
+
+
+```{r, message = F, warning = F}
+suppressWarnings(library(dplyr))
+```
+
+
+## Question 1
+
+Load the presidential survey data in the nes folder. presidential preference by income. Other variables include: sex, ethnicity, party identification, political ideology.
+
+```{r load the data}
+nes_data_raw = foreign::read.dta("ARM_Data/nes/nes5200_processed_voters_realideo.dta")
+
+```
+
+### a) Build a logistic model with these predictors; b) Compare the different models; and c) Choose a model and discuss it.
+
+Note that `presvote` is the outcome (dem vs gop vote) talked about in Section 5.1. when vote == 0, the presvote variable is missing. It also contains many election years.
+
+```{r}
+bush_data = subset(nes_data_raw, !is.na(presvote) & year == 1992 & !is.na(income)) 
+bush_data$bush_vote = with(bush_data, ifelse(presvote == "2. republican", 1, 0))
+
+#by thirds
+bush_data$income_var = with(bush_data, ifelse(income %in% levels(income)[1:2], 0,
+                                             ifelse(
+                                               income %in% levels(income)[3:4], 
+                                                    1, 2))) %>% 
+  factor(levels = 0:2, labels = c("Lower third", "Middle third", "Upper third"))
+
+#pretty simple model
+m1 <- glm(bush_vote ~ female + white + educ1 + income_var + urban + age, data=bush_data, family=binomial(link="logit"))
+summary(m1)
+arm::binnedplot(predict(m1), resid(m1))
+
+
+#using the more complex variables works a little better
+m2 <- glm(bush_vote ~ female + race + educ1 + income + urban + age, data=bush_data, family=binomial(link="logit"))
+summary(m2)
+arm::binnedplot(predict(m2), resid(m2))
+
+
+#refined model - ideology is a major predictor and probably confounds the other variables
+m3 <- glm(bush_vote ~ white + income_var + ideo, data=bush_data, family=binomial(link="logit"))
+summary(m3)
+arm::binnedplot(predict(m3), resid(m3))
+
+```
+
+
+## Question 2
+
+Sketch without a computer (so not labeled), $Pr(y = 1) =$    
+a.) $logit^{-1}(x)$    
+b.) $logit^{-1}(x + 2)$    
+c.) $logit^{-1}(2x)$    
+d.) $logit^{-1}(2 + 2x)$    
+e.) $logit^{-1}(-2x)$    
+
+```{r, echo = F}
+x = seq(-7.5, 7.5, length = 100)
+plot(x, arm::invlogit(x), "l", col = "red")
+lines(x, arm::invlogit(x+2), col = "blue")
+lines(x, arm::invlogit(2*x), col = "green")
+lines(x, arm::invlogit(2*x + 2))
+lines(x, arm::invlogit(-2*x), col = "orange")
+
+```
+
+## Question 3 
+
+Research question: parents' income as a predictor of HS graduation for child.    
+- Parents with no income: 27% graduation probability.    
+- Parents earning $60,000: 88% graduation probability.
+
+Find a logistic model consistent with this. (x can be in $10K units).
+$$logit(y) = \beta_0 + \beta_1 x$$
+
+$$Pr(y = 1|x = 0) = 0.27 \rightarrow \beta_0 = logit(0.27) = -0.99$$
+$$Pr(y = 1|x = 6) = 0.88 \rightarrow \beta_1 = \frac{logit(0.88) + 0.99}{6} = 0.5$$
+
+$$logit(y) = -0.99 + 0.5x$$
+
+```{r check}
+arm::invlogit(-0.99)
+arm::invlogit(-0.99 + 0.5 * 6)
+
+```
+
+## Question 4 Pick and do your own problem (pass)
+
+## Question 5 
+
+In a class of 50 students, a logistic regression of course grade (pass/fail) predicted by midterm grade (continuous, $\mu = 60, \sigma = 15$).
+$$logit(Pr(pass)) = -24 + 0.4x$$
+
+### a) Plot fitted model and some example data
+
+```{r}
+
+sim_mt_grades = rnorm(50, 60, 15)
+sim_cs_grades = rbinom(50, 1, prob = arm::invlogit(-24 + 0.4 *sim_mt_grades))
+
+plot(sim_mt_grades, sim_cs_grades, xlim = c(25, 95), ylim = c(0,1))
+
+#model fit
+midterm_grade_input = 25:95
+lines(midterm_grade_input, arm::invlogit(-24 + 0.4 *midterm_grade_input),  xlim = c(25, 95), ylim = c(0,1), col = "red")
+
+```
+
+### b) Suppose that midterm grade is normalized, what is the new equation.
+
+$$logit(Pr(Pass|\bar{x})) = -24 + 0.4\bar{x}) = 0 \rightarrow \beta'_0 = 0$$
+$$logit(Pr(Pass) = 5z_x$$
+
+
+### c) Create a random noise variable (N(0,1)), how does it affect the deviance?
+
+This question seems out of place, but using the example data. The deviance will  likely decrease but not substantially.
+
+```{r}
+test_input_mt = rnorm(10000, 60, 15)
+test_output_cs = rbinom(10000, 1, prob = arm::invlogit(-24 + 0.4 *test_input_mt))
+
+grade_model = glm(test_output_cs ~ test_input_mt, family = binomial)
+deviance(grade_model)
+
+zsim = (test_input_mt - 60)/15
+grade_modelz = glm(test_output_cs ~ zsim, family = binomial)
+
+
+
+newpred = rnorm(50)
+grade_model2 = glm(sim_cs_grades ~ sim_mt_grades + newpred)
+deviance(grade_model2)
+
+```
+
+
+
+
+## Question 6
